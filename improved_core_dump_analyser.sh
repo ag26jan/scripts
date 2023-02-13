@@ -23,7 +23,7 @@ else
 fi
 
 # Extract version information from the file
-input_string=$(strings "$file_name" | grep -E "/yugabyte/yb-software/yugabyte-|yugabyte_version" | head -n 1) || input_string=""
+input_string=$(strings "$file_name" | grep -E "/yugabyte/yb-software/yugabyte-" | head -n 1) || input_string=""
 
 modified_string=$(echo "$input_string" | awk -F "/" '{for (i=1; i<=NF; i++) if ($i == "yugabyte" && $(i+1) == "yb-software") print $(i+2)}' | sed 's/centos/linux/' | sed 's/$/.tar.gz/')
 
@@ -66,4 +66,56 @@ fi
 # Replace the path in the input_string with the new target directory
 new_input_string=$(echo "$input_string" | awk -F "/yugabyte/yb-software" '{print "/yugabyte/yb-software"$2}' | sed "s|/yugabyte/yb-software/yugabyte-[^/]*|$target_dir/yugabyte-$version|")
 # Use the lldb command with the new input string
-lldb -f "$new_input_string" -c $file_name
+# Ask user to enetr available lldb command option for ease.
+
+#The below section is to ask few more user inputs and redirection etc.
+
+
+
+echo "Select an option for lldb command and press ENTER:"
+echo "1. bt"
+echo "2. thread backtrace all"
+echo "3. Other lldb command"
+echo "4. Quit"
+read -r option
+
+while [[ ! "$option" =~ ^(1|2|3|4)$ ]]; do
+  echo "Error: Invalid option selected. Please select either 1, 2, 3 or 4."
+  echo "Select an option for lldb command and press ENTER:"
+  echo "1. bt"
+  echo "2. thread backtrace all"
+  echo "3. Other lldb command"
+  echo "4. Quit"
+  read -r option
+done
+
+if [ "$option" == "1" ]; then
+  lldb_command="bt"
+elif [ "$option" == "2" ]; then
+  lldb_command="thread backtrace all"
+elif [ "$option" == "3" ]; then
+  echo "Enter the lldb command:"
+  read -r lldb_command
+fi
+
+if [ "$option" != "4" ]; then
+  echo "Do you want to redirect the output to a file? (y/n)"
+  read -r redirect_output
+  while [[ ! "$redirect_output" =~ ^(y|n)$ ]]; do
+    echo "Error: Invalid option selected. Please enter either y or n."
+    echo "Do you want to redirect the output to a file? (y/n)"
+    read -r redirect_output
+  done
+
+
+if [ "$redirect_output" == "y" ]; then
+  output_file="${file_name}_$(echo "$lldb_command" | tr -s ' ' '_')_analysis.out"
+  echo "Output will be saved to $output_file"
+  lldb -f "$new_input_string" -c "$file_name" -o "$lldb_command" -o "quit"> "$output_file"
+  echo "Analysis complete, the file '$output_file' has been saved."
+else
+  lldb -f "$new_input_string" -c "$file_name" -o "$lldb_command"
+fi
+fi
+echo "Exiting."
+exit 0
