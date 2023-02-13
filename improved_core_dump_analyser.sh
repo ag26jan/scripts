@@ -34,24 +34,38 @@ output_string="https://downloads.yugabyte.com/releases/$version/$modified_string
 echo "The final URL is: $output_string"
 
 # Download the binary
+
 download_file="$modified_string"
 target_dir="/cases/home/yugabyte/yb-software"
 
-echo "Downloading the binary file to $target_dir/$modified_string"
-
-curl -L -# "$output_string" -o "$target_dir/$modified_string"
-if [ $? -eq 0 ]; then
-  echo "Download of YB version file succeeded."
+if [ -f "$target_dir/$modified_string" ]; then
+  echo "The file $modified_string already exists in $target_dir. Skipping the download step."
 else
-  error_exit "Error: Download of YB version file failed."
+  echo "Downloading the binary file to $target_dir/$modified_string"
+
+  curl -L -# "$output_string" -o "$target_dir/$modified_string"
+  if [ $? -eq 0 ]; then
+    echo "Download of YB version file succeeded."
+  else
+    error_exit "Error: Download of YB version file failed."
+  fi
 fi
 
+
 # Extract the binary
+
 tar_file="$target_dir/$modified_string"
 
-echo "Extracting $tar_file in $target_dir"
+extracted_directory="$target_dir/yugabyte-$version"
 
-tar -xzf "$tar_file" -C "$target_dir" --strip-components=0 &>/dev/null
+if [ -d "$extracted_directory" ]; then
+  echo "$extracted_directory already exists, not extracting again."
+else
+  echo "Extracting $tar_file in $target_dir"
+  tar -xzf "$tar_file" -C "$target_dir" --strip-components=0 &>/dev/null
+fi
+
+
 
 # Execute post install script
 post_install="$target_dir/yugabyte-$version/bin/post_install.sh"
