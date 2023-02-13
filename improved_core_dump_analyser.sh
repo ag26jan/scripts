@@ -6,44 +6,44 @@ function error_exit() {
   exit 1
 }
 
-echo "Enter the file name: "
+echo "Enter the Core dump file name: "
 read -r file_name
 
-# Check if file exists
+# Check if the Core file exists
 if [ ! -f "$file_name" ]; then
   error_exit "Error: The file '$file_name' does not exist."
 fi
 
-# Check if file is a valid core dump
-file_output=$(file "$file_name")
-if echo "$file_output" | grep -q "core file"; then
-  echo "Great! The file is a valid core dump, proceeding with analysis."
+# Check if the Core file is a valid core dump
+file_type=$(file "$file_name")
+if echo "$file_type" | grep -q "core file"; then
+  echo "Great! The core dump file provided is a valid core dump, proceeding with analysis of core dump."
 else
-  error_exit "Error: The file is NOT an ELF core dump, please provide a valid core dump file. Make sure the file IS NOT compressed, if so please extract it and then try again!"
+  error_exit "Error: The Core dump file is NOT an ELF core dump, please provide a valid core dump file. Make sure the file IS NOT compressed, if so please extract it and then try again!"
 fi
 
-# Extract version information from the file
-input_string=$(strings "$file_name" | grep -E "/yugabyte/yb-software/yugabyte-" | head -n 1) || input_string=""
+# Extract the yugabyte binary version information from the core dump file
+yb_db_version=$(strings "$file_name" | grep -E "/yugabyte/yb-software/yugabyte-" | head -n 1) || yb_db_version=""
 
-modified_string=$(echo "$input_string" | awk -F "/" '{for (i=1; i<=NF; i++) if ($i == "yugabyte" && $(i+1) == "yb-software") print $(i+2)}' | sed 's/centos/linux/' | sed 's/$/.tar.gz/')
+yb_db_tar_file=$(echo "$yb_db_version" | awk -F "/" '{for (i=1; i<=NF; i++) if ($i == "yugabyte" && $(i+1) == "yb-software") print $(i+2)}' | sed 's/centos/linux/' | sed 's/$/.tar.gz/')
 
-version=$(echo "$modified_string" | awk -F "-" '{print $2}')
+version=$(echo "$yb_db_tar_file" | awk -F "-" '{print $2}')
 
-# Generate the URL for the binary
-output_string="https://downloads.yugabyte.com/releases/$version/$modified_string"
-echo "The final URL is: $output_string"
+# Generate the URL for the yb-db binary
+yb_db_tar_url="https://downloads.yugabyte.com/releases/$version/$yb_db_tar_file"
+echo "The final URL is: $yb_db_tar_url"
 
-# Download the binary
+# Download the yb db binary tar file
 
-download_file="$modified_string"
-target_dir="/cases/home/yugabyte/yb-software"
+download_file="$yb_db_tar_file"
+yb_db_install_dir="/cases/home/yugabyte/yb-software"
 
-if [ -f "$target_dir/$modified_string" ]; then
-  echo "The file $modified_string already exists in $target_dir. Skipping the download step."
+if [ -f "$yb_db_install_dir/$yb_db_tar_file" ]; then
+  echo "The file $yb_db_tar_file already exists in $yb_db_install_dir. Skipping the download step."
 else
-  echo "Downloading the binary file to $target_dir/$modified_string"
+  echo "Downloading the YB version file to $yb_db_install_dir/$yb_db_tar_file"
 
-  curl -L -# "$output_string" -o "$target_dir/$modified_string"
+  curl -L -# "$yb_db_tar_url" -o "$yb_db_install_dir/$yb_db_tar_file"
   if [ $? -eq 0 ]; then
     echo "Download of YB version file succeeded."
   else
@@ -54,31 +54,31 @@ fi
 
 # Extract the binary
 
-tar_file="$target_dir/$modified_string"
+tar_file="$yb_db_install_dir/$yb_db_tar_file"
 
-extracted_directory="$target_dir/yugabyte-$version"
+extracted_directory="$yb_db_install_dir/yugabyte-$version"
 
 if [ -d "$extracted_directory" ]; then
   echo "$extracted_directory already exists, not extracting again."
 else
-  echo "Extracting $tar_file in $target_dir"
-  tar -xzf "$tar_file" -C "$target_dir" --strip-components=0 &>/dev/null
+  echo "Extracting $tar_file in $yb_db_install_dir"
+  tar -xzf "$tar_file" -C "$yb_db_install_dir" --strip-components=0 &>/dev/null
 fi
 
 
 
 # Execute post install script
-post_install="$target_dir/yugabyte-$version/bin/post_install.sh"
+post_install="$yb_db_install_dir/yugabyte-$version/bin/post_install.sh"
 
 if [ -f "$post_install" ]; then
   echo "Executing post_install script to setup the binary as per core dump. Please bare with me!"
-  $post_install /dev/null 2>&1
+  $post_install &>/dev/null
 else
   error_exit "Error: $post_install not found."
 fi
 
-# Replace the path in the input_string with the new target directory
-new_input_string=$(echo "$input_string" | awk -F "/yugabyte/yb-software" '{print "/yugabyte/yb-software"$2}' | sed "s|/yugabyte/yb-software/yugabyte-[^/]*|$target_dir/yugabyte-$version|")
+# Replace the path in the yb_db_version with the new target directory
+new_yb_db_version=$(echo "$yb_db_version" | awk -F "/yugabyte/yb-software" '{print "/yugabyte/yb-software"$2}' | sed "s|/yugabyte/yb-software/yugabyte-[^/]*|$yb_db_install_dir/yugabyte-$version|")
 # Use the lldb command with the new input string
 # Ask user to enetr available lldb command option for ease.
 
@@ -125,10 +125,10 @@ if [ "$option" != "4" ]; then
 if [ "$redirect_output" == "y" ]; then
   output_file="${file_name}_$(echo "$lldb_command" | tr -s ' ' '_')_analysis.out"
   echo "Output will be saved to $output_file"
-  lldb -f "$new_input_string" -c "$file_name" -o "$lldb_command" -o "quit"> "$output_file"
+  lldb -f "$new_yb_db_version" -c "$file_name" -o "$lldb_command" -o "quit"> "$output_file"
   echo "Analysis complete, the file '$output_file' has been saved."
 else
-  lldb -f "$new_input_string" -c "$file_name" -o "$lldb_command"
+  lldb -f "$new_yb_db_version" -c "$file_name" -o "$lldb_command"
 fi
 fi
 echo "Exiting."
