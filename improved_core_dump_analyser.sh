@@ -36,7 +36,7 @@ echo "The final URL is: $yb_db_tar_url"
 # Download the yb db binary tar file
 
 download_file="$yb_db_tar_file"
-yb_db_install_dir="/cases/home/yugabyte/yb-software"
+yb_db_install_dir="/home/yugabyte/yb-software"
 
 if [ -f "$yb_db_install_dir/$yb_db_tar_file" ]; then
   echo "The file $yb_db_tar_file already exists in $yb_db_install_dir. Skipping the download step."
@@ -51,34 +51,53 @@ else
   fi
 fi
 
+#Renamed executable dir, means we are going to extract the tar file binary in the same version format as core file.
+
+executable_dir=$(echo "$yb_db_version" | awk -F "/" '{for (i=1; i<=NF; i++) if ($i == "yugabyte" && $(i+1) == "yb-software") print $(i+2)}')
+
+
+# Function to display a rotating symbol
+function spinner {
+    local pid=$!
+    local delay=0.75
+    local spinstr='|/-\'
+    while [ "$(ps a | awk '{print $1}' | grep $pid)" ]; do
+        local temp=${spinstr#?}
+        printf " [%c]  " "$spinstr"
+        local spinstr=$temp${spinstr%"$temp"}
+        sleep $delay
+        printf "\b\b\b\b\b\b"
+    done
+    printf "    \b\b\b\b"
+}
 
 # Extract the binary
-
 tar_file="$yb_db_install_dir/$yb_db_tar_file"
-
-extracted_directory="$yb_db_install_dir/yugabyte-$version"
+extracted_directory="$yb_db_install_dir/$executable_dir"
 
 if [ -d "$extracted_directory" ]; then
   echo "$extracted_directory already exists, not extracting again."
 else
   echo "Extracting $tar_file in $yb_db_install_dir"
-  tar -xzf "$tar_file" -C "$yb_db_install_dir" --strip-components=0 &>/dev/null
+  mkdir -p $yb_db_install_dir/$executable_dir && tar -xzf "$tar_file" --strip-components=1 -C $_ &>/dev/null &
+  spinner
 fi
 
-
-
 # Execute post install script
-post_install="$yb_db_install_dir/yugabyte-$version/bin/post_install.sh"
+post_install="$yb_db_install_dir/$executable_dir/bin/post_install.sh"
 
 if [ -f "$post_install" ]; then
-  echo "Executing post_install script to setup the binary as per core dump. Please bare with me!"
-  $post_install &>/dev/null
+  echo "Executing post_install script to setup the binary as per core dump. Please bear with me!"
+  $post_install &>/dev/null &
+  spinner
 else
   error_exit "Error: $post_install not found."
 fi
 
+
+
 # Replace the path in the yb_db_version with the new target directory
-new_yb_db_version=$(echo "$yb_db_version" | awk -F "/yugabyte/yb-software" '{print "/yugabyte/yb-software"$2}' | sed "s|/yugabyte/yb-software/yugabyte-[^/]*|$yb_db_install_dir/yugabyte-$version|")
+new_yb_db_version=$(echo "$yb_db_version" | awk -F "/yugabyte/yb-software" '{print "/yugabyte/yb-software"$2}' | sed "s|/yugabyte/yb-software/yugabyte-[^/]*|$yb_db_install_dir/$executable_dir|")
 # Use the lldb command with the new input string
 # Ask user to enetr available lldb command option for ease.
 
